@@ -3,9 +3,6 @@ package org.gfd.gsmlocation;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import android.location.Location;
-import android.util.Log;
-
 import org.gfd.gsmlocation.model.CellInfo;
 import org.microg.nlp.api.LocationBackendService;
 import org.microg.nlp.api.LocationHelper;
@@ -15,7 +12,6 @@ public class GSMService extends LocationBackendService {
     private Lock lock = new ReentrantLock();
     private Thread worker = null;
 
-    @Override
     protected void onOpen() {
         super.onOpen();
         CellbasedLocationProvider.getInstance().init(getApplicationContext());
@@ -23,7 +19,6 @@ public class GSMService extends LocationBackendService {
             lock.lock();
             if (worker != null) worker.interrupt();
             worker = new Thread() {
-                @Override
                 public void run() {
                     CellbasedLocationProvider lp =
                         CellbasedLocationProvider.getInstance();
@@ -59,7 +54,6 @@ public class GSMService extends LocationBackendService {
         }
     }
 
-    @Override
     protected void onClose() {
         super.onClose();
         try {

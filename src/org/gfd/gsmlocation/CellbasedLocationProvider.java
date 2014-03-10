@@ -391,7 +391,6 @@ public class CellbasedLocationProvider {
         public int LAC;
         public int rssi;
 
-        @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
@@ -405,7 +404,6 @@ public class CellbasedLocationProvider {
             return true;
         }
 
-        @Override
         public int hashCode() {
             int result = CID;
             result = 31 * result + LAC;
@@ -413,7 +411,6 @@ public class CellbasedLocationProvider {
             return result;
         }
 
-        @Override
         public String toString() {
             return "SignalStringthInfo{" +
                     "CID=" + CID +
@@ -444,7 +441,6 @@ public class CellbasedLocationProvider {
             private LruCache<SignalStringthInfo,SignalStringthInfo> recentSignals =
                     new LruCache<SignalStringthInfo, SignalStringthInfo>(16);
 
-            @Override
             public void onSignalStrengthsChanged(SignalStrength signalStrength) {
                 if (location != null && location instanceof GsmCellLocation) {
                     SignalStringthInfo ssi = new SignalStringthInfo();
@@ -464,11 +460,9 @@ public class CellbasedLocationProvider {
                 }
                 handle(false);
             }
-            @Override
             public void onServiceStateChanged(ServiceState serviceState) {
                 handle(true);
             }
-            @Override
             public void onCellLocationChanged(CellLocation location) {
                 if (!(location instanceof GsmCellLocation)) return;
                 CellbasedLocationProvider.this.location = (GsmCellLocation) location;
@@ -476,11 +470,9 @@ public class CellbasedLocationProvider {
                 add(location);
                 handle(false);
             }
-            @Override
             public void onDataConnectionStateChanged(int state) {
                 handle(false);
             }
-            @Override
             public void onCellInfoChanged(List<android.telephony.CellInfo> cellInfo) {
                 measurement.getAndIncrement();
                 addCells(cellInfo);

@@ -11,7 +11,6 @@ public class CellInfo {
     public long measurement;
     public long seen = System.currentTimeMillis();
 
-    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
@@ -28,7 +27,6 @@ public class CellInfo {
         return true;
     }
 
-    @Override
     public int hashCode() {
         int result;
         long temp;
@@ -54,7 +52,6 @@ public class CellInfo {
         return CID == -1 && LAC == -1;
     }
 
-    @Override
     public String toString() {
         return "CellInfo(" +
                 "MCC=" + MCC +

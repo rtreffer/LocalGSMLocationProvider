@@ -102,7 +102,6 @@ public class CellTowerDatabase {
             this.cid = cid;
             this.lac = lac;
         }
-        @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
@@ -116,7 +115,6 @@ public class CellTowerDatabase {
 
             return true;
         }
-        @Override
         public int hashCode() {
             int result = mcc != null ? mcc.hashCode() : (1 << 16);
             result = 31 * result + (mnc != null ? mnc.hashCode() : (1 << 16));
