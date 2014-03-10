@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="dbfile">towers.bcs.xz</string>
+  <integer name="dbfile.size">134672384</integer>
+</resources>
