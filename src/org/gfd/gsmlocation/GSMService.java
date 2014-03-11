@@ -7,33 +7,37 @@ import org.gfd.gsmlocation.model.CellInfo;
 import org.microg.nlp.api.LocationBackendService;
 import org.microg.nlp.api.LocationHelper;
 
+import android.content.Context;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Log;
 
 public class GSMService extends LocationBackendService {
 
+    protected String TAG = "o.gfd.gsmlp.LocationBackendService";
+
     protected Lock lock = new ReentrantLock();
     protected Thread worker = null;
-    protected HandlerThread hthread = null;
 
     protected void onOpen() {
         super.onOpen();
 
-        hthread = new HandlerThread(
-            "GSMNetworkLocationProvider",
-            android.os.Process.THREAD_PRIORITY_BACKGROUND);
-        hthread.start();
-        Looper looper = hthread.getLooper();
+        Log.d(TAG, "Starting location backend via looper");
+
+        Looper looper = getApplication().getMainLooper();
+        final Context applicationContext = getApplicationContext();
+
         Handler handler = new Handler(looper) {
             public void handleMessage(Message msg) {
-                CellbasedLocationProvider.getInstance().init(getApplicationContext());
+                Log.d(TAG, "Starting location backend in \"UI\" thread");
+                CellbasedLocationProvider.getInstance().init(applicationContext);
                 try {
                     lock.lock();
                     if (worker != null) worker.interrupt();
                     worker = new Thread() {
                         public void run() {
+                            Log.d(TAG, "Starting reporter thread");
                             CellbasedLocationProvider lp =
                                 CellbasedLocationProvider.getInstance();
                             double lastLng = 0d;
@@ -55,6 +59,7 @@ public class GSMService extends LocationBackendService {
                                 lat /= infos.length;
                                 float acc = (float)(800d / infos.length);
                                 if (lng != lastLng || lat != lastLat) {
+                                    Log.d(TAG, "report (" + lat + "," + lng + ")");
                                     lastLng = lng;
                                     lastLat = lat;
                                     report(LocationHelper.create("gsm", lat, lng, acc));
@@ -68,7 +73,7 @@ public class GSMService extends LocationBackendService {
                 }
             }
         };
-        handler.handleMessage(null);
+        handler.handleMessage(new Message());
     }
 
     protected void onClose() {
