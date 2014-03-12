@@ -428,6 +428,13 @@ public class CellbasedLocationProvider {
 
         telephonyManager = (TelephonyManager) ctx.getSystemService(Context.TELEPHONY_SERVICE);
 
+        final Context fctx = ctx;
+        new Thread() {
+            public void run() {
+                db.init(fctx);
+            }
+        }.start();
+
         /**
          * The <b>actual</b> phone listener, handling new modem based events.
          */
