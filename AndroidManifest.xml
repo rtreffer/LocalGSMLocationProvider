@@ -23,6 +23,7 @@ xmlns:android="http://schemas.android.com/apk/res/android">
   <service
     android:name=".GSMService"
     android:exported="true"
+    android:isolatedProcess="true"
     android:label="GSMNetworkLocationProvider">
       <intent-filter>
         <action android:name="org.microg.nlp.LOCATION_BACKEND" />
