@@ -9,6 +9,7 @@ import org.microg.nlp.api.LocationHelper;
 
 import android.app.Service;
 import android.content.Intent;
+import android.os.IBinder;
 import android.util.Log;
 
 public class GSMService extends LocationBackendService {
@@ -17,6 +18,12 @@ public class GSMService extends LocationBackendService {
 
     protected Lock lock = new ReentrantLock();
     protected Thread worker = null;
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        Log.d(TAG, "Binder ONBIND called");
+        return super.onBind(intent);
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -67,7 +74,14 @@ public class GSMService extends LocationBackendService {
         return Service.START_STICKY;
     }
 
+    @Override
+    protected void onOpen() {
+        super.onOpen();
+        Log.d(TAG, "Binder OPEN called");
+    }
+
     protected void onClose() {
+        Log.d(TAG, "Binder CLOSE called");
         super.onClose();
         try {
             lock.lock();
