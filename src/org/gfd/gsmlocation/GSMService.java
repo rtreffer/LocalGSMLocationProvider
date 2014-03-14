@@ -8,8 +8,11 @@ import org.microg.nlp.api.LocationBackendService;
 import org.microg.nlp.api.LocationHelper;
 
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 
 public class GSMService extends LocationBackendService {
@@ -29,7 +32,13 @@ public class GSMService extends LocationBackendService {
         if (worker != null && worker.isAlive()) return;
 
         Log.d(TAG, "Starting location backend");
-        CellbasedLocationProvider.getInstance().init(getApplicationContext());
+        Handler handler = new Handler(Looper.getMainLooper());
+        final Context ctx = getApplicationContext();
+        handler.post(new Runnable() {
+            public void run() {
+                CellbasedLocationProvider.getInstance().init(ctx);
+            }
+        });
         try {
             lock.lock();
             if (worker != null) worker.interrupt();
@@ -97,7 +106,7 @@ public class GSMService extends LocationBackendService {
         super.onClose();
         try {
             lock.lock();
-            if (worker != null && worker.isAlive) worker.interrupt();
+            if (worker != null && worker.isAlive()) worker.interrupt();
             if (worker != null) worker = null;
         } finally {
             try { lock.unlock(); } catch (Exception e) {}
