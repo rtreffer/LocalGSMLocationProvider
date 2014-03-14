@@ -37,7 +37,7 @@ public class GSMService extends LocationBackendService {
         });
         try {
             lock.lock();
-            if (worker != null) worker.interrupt();
+            if (worker != null && worker.isAlive()) worker.interrupt();
             worker = new Thread() {
                 public void run() {
                     Log.d(TAG, "Starting reporter thread");
@@ -47,6 +47,7 @@ public class GSMService extends LocationBackendService {
                     try { while (true) {
                         Thread.sleep(1000);
 
+                        try {
                         CellInfo[] infos = lp.getAll();
 
                         if (infos.length == 0) continue;
@@ -66,6 +67,9 @@ public class GSMService extends LocationBackendService {
                             lastLat = lat;
                             report(LocationHelper.create("gsm", lat, lng, acc));
                         }
+                        } catch (Exception e) {
+                            Log.e(TAG, "Update loop failed", e);
+                        }
                     } } catch (InterruptedException e) {}
                 }
             };
@@ -79,6 +83,8 @@ public class GSMService extends LocationBackendService {
 
     @Override
     protected Location update() {
+        start();
+
         CellInfo[] infos = lp.getAll();
 
         if (infos.length == 0) return null;
