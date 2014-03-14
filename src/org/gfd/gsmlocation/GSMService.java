@@ -28,7 +28,7 @@ public class GSMService extends LocationBackendService {
         return super.onBind(intent);
     }
 
-    public void start() throws Exception {
+    public void start() {
         if (worker != null && worker.isAlive()) return;
 
         Log.d(TAG, "Starting location backend");
@@ -77,7 +77,6 @@ public class GSMService extends LocationBackendService {
             worker.start();
         } catch (Exception e) {
             Log.e(TAG, "Start failed", e);
-            throw e;
         } finally {
             try { lock.unlock(); } catch (Exception e) {}
         }
