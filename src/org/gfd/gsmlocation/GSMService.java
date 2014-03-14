@@ -28,7 +28,7 @@ public class GSMService extends LocationBackendService {
         return super.onBind(intent);
     }
 
-    public void start() {
+    public void start() throws Exception {
         if (worker != null && worker.isAlive()) return;
 
         Log.d(TAG, "Starting location backend");
