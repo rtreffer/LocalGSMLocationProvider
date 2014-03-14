@@ -25,9 +25,8 @@ public class GSMService extends LocationBackendService {
         return super.onBind(intent);
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        super.onStartCommand(intent, flags, startId);
+    public void start() {
+        if (worker != null && worker.isAlive()) return;
 
         Log.d(TAG, "Starting location backend");
         CellbasedLocationProvider.getInstance().init(getApplicationContext());
@@ -67,9 +66,19 @@ public class GSMService extends LocationBackendService {
                 }
             };
             worker.start();
+        } catch (Exception e) {
+            Log.e(TAG, "Start failed", e);
+            throw e;
         } finally {
             try { lock.unlock(); } catch (Exception e) {}
         }
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        super.onStartCommand(intent, flags, startId);
+
+        start();
 
         return Service.START_STICKY;
     }
@@ -77,6 +86,9 @@ public class GSMService extends LocationBackendService {
     @Override
     protected void onOpen() {
         super.onOpen();
+
+        start();
+
         Log.d(TAG, "Binder OPEN called");
     }
 
@@ -85,7 +97,8 @@ public class GSMService extends LocationBackendService {
         super.onClose();
         try {
             lock.lock();
-            if (worker != null) worker.interrupt();
+            if (worker != null && worker.isAlive) worker.interrupt();
+            if (worker != null) worker = null;
         } finally {
             try { lock.unlock(); } catch (Exception e) {}
         }
