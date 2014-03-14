@@ -10,6 +10,7 @@ import org.microg.nlp.api.LocationHelper;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.location.Location;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -21,12 +22,7 @@ public class GSMService extends LocationBackendService {
 
     protected Lock lock = new ReentrantLock();
     protected Thread worker = null;
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        Log.d(TAG, "Binder ONBIND called");
-        return super.onBind(intent);
-    }
+    protected CellbasedLocationProvider lp = null;
 
     public void start() {
         if (worker != null && worker.isAlive()) return;
@@ -45,8 +41,7 @@ public class GSMService extends LocationBackendService {
             worker = new Thread() {
                 public void run() {
                     Log.d(TAG, "Starting reporter thread");
-                    CellbasedLocationProvider lp =
-                        CellbasedLocationProvider.getInstance();
+                    lp = CellbasedLocationProvider.getInstance();
                     double lastLng = 0d;
                     double lastLat = 0d;
                     try { while (true) {
@@ -83,12 +78,23 @@ public class GSMService extends LocationBackendService {
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        super.onStartCommand(intent, flags, startId);
+    protected Location update() {
+        CellInfo[] infos = lp.getAll();
 
-        start();
+        if (infos.length == 0) return null;
 
-        return Service.START_STICKY;
+        double lng = 0d;
+        double lat = 0d;
+        for(CellInfo c : infos) {
+            lng += c.lng;
+            lat += c.lat;
+        }
+        lng /= infos.length;
+        lat /= infos.length;
+        float acc = (float)(800d / infos.length);
+
+        Log.d(TAG, "update (" + lat + "," + lng + ")");
+        return LocationHelper.create("gsm", lat, lng, acc);
     }
 
     @Override
@@ -111,4 +117,5 @@ public class GSMService extends LocationBackendService {
             try { lock.unlock(); } catch (Exception e) {}
         }
     }
+
 }
