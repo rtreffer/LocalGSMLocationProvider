@@ -62,7 +62,7 @@ public class GSMService extends LocationBackendService {
                         lat /= infos.length;
                         float acc = (float)(800d / infos.length);
                         if (lng != lastLng || lat != lastLat) {
-                            Log.d(TAG, "report (" + lat + "," + lng + ")");
+                            Log.d(TAG, "report (" + lat + "," + lng + ") / " + acc);
                             lastLng = lng;
                             lastLat = lat;
                             report(LocationHelper.create("gsm", lat, lng, acc));
