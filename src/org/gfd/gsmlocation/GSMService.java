@@ -85,6 +85,8 @@ public class GSMService extends LocationBackendService {
     protected Location update() {
         start();
 
+        if (lp == null) return null;
+
         CellInfo[] infos = lp.getAll();
 
         if (infos.length == 0) return null;
