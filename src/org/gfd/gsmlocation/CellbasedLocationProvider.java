@@ -1,5 +1,8 @@
 package org.gfd.gsmlocation;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -10,9 +13,7 @@ import org.gfd.gsmlocation.model.CellInfo;
 
 import android.content.Context;
 import android.telephony.CellIdentityGsm;
-import android.telephony.CellIdentityWcdma;
 import android.telephony.CellInfoGsm;
-import android.telephony.CellInfoWcdma;
 import android.telephony.CellLocation;
 import android.telephony.NeighboringCellInfo;
 import android.telephony.PhoneStateListener;
@@ -31,6 +32,97 @@ import android.util.LruCache;
  * protective tool to avoid completely broken data.
  */
 public class CellbasedLocationProvider {
+
+    /* Reflection-based shims to use CellInfoWcdma and stay compatible with API level 17 */
+    private static class CellIdentityWcdma {
+        private static Class<?> mCls;
+        private static Method mGetCid;
+        private static Method mGetLac;
+        private static Method mGetMcc;
+        private static Method mGetMnc;
+        private static Method mGetPsc;
+        static {
+            try {
+                mCls = Class.forName("android.telephony.CellIdentityWcdma");
+                mGetCid = mCls.getMethod("getCid");
+                mGetLac = mCls.getMethod("getLac");
+                mGetMcc = mCls.getMethod("getMcc");
+                mGetMnc = mCls.getMethod("getMnc");
+                mGetPsc = mCls.getMethod("getPsc");
+            } catch (final ClassNotFoundException e) {
+            } catch (final NoSuchMethodException e) {
+            }
+        }
+        private final Object mObj;
+        public CellIdentityWcdma(final Object obj) {
+            mObj = obj;
+        }
+        public int getCid() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetCid.invoke(mObj)).intValue();
+        }
+        public int getLac() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetLac.invoke(mObj)).intValue();
+        }
+        public int getMcc() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetMcc.invoke(mObj)).intValue();
+        }
+        public int getMnc() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetMnc.invoke(mObj)).intValue();
+        }
+        public int getPsc() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetPsc.invoke(mObj)).intValue();
+        }
+    }
+
+    private static class CellSignalStrengthWcdma {
+        private static Class<?> mCls;
+        private static Method mGetAsuLevel;
+        static {
+            try {
+                mCls = Class.forName("android.telephony.CellSignalStrengthWcdma");
+                mGetAsuLevel = mCls.getMethod("getAsuLevel");
+            } catch (final ClassNotFoundException e) {
+            } catch (final NoSuchMethodException e) {
+            }
+        }
+        private final Object mObj;
+        public CellSignalStrengthWcdma(final Object obj) {
+            mObj = obj;
+        }
+        public int getAsuLevel() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetAsuLevel.invoke(mObj)).intValue();
+        }
+    }
+
+    private static class CellInfoWcdma {
+        private static Class<?> mCls;
+        private static Method mGetCellIdentity;
+        private static Method mGetCellSignalStrength;
+        static {
+            try {
+                mCls = Class.forName("android.telephony.CellInfoWcdma");
+                mGetCellIdentity = mCls.getMethod("getCellIdentity");
+                mGetCellSignalStrength = mCls.getMethod("getCellSignalStrength");
+            } catch (final ClassNotFoundException e) {
+            } catch (final NoSuchMethodException e) {
+            }
+        }
+        private final Object mObj;
+        public CellInfoWcdma(final Object obj) {
+            mObj = obj;
+        }
+        public static boolean isInstance(final Object obj) {
+            return null != mCls && mCls.isInstance(obj);
+        }
+        public CellIdentityWcdma getCellIdentity()
+                throws IllegalAccessException, InvocationTargetException {
+            return new CellIdentityWcdma(mGetCellIdentity.invoke(mObj));
+        }
+        public CellSignalStrengthWcdma getCellSignalStrength()
+                throws IllegalAccessException, InvocationTargetException {
+            return new CellSignalStrengthWcdma(mGetCellSignalStrength.invoke(mObj));
+        }
+    }
 
     // The key purpose of this class is pulling all the APIs and trying to turn it into s.th.
     // remotely consistent...
@@ -329,19 +421,25 @@ public class CellbasedLocationProvider {
                     pushUnusedCells(ci);
                 }
             }
-            if (inputCellInfo instanceof CellInfoWcdma) {
-                CellInfoWcdma wcdma = (CellInfoWcdma) inputCellInfo;
-                CellIdentityWcdma id = wcdma.getCellIdentity();
-                cellInfos = db.query(id.getMcc(), id.getMnc(), id.getCid(), id.getLac());
-                if (cellInfos == null) {
-                    CellInfo ci = new CellInfo();
-                    ci.lng = 0d;
-                    ci.lat = 0d;
-                    ci.CID = id.getCid();
-                    ci.LAC = id.getLac();
-                    ci.MNC = id.getMnc();
-                    ci.MCC = id.getMcc();
-                    pushUnusedCells(ci);
+            if (CellInfoWcdma.isInstance(inputCellInfo)) {
+                try {
+                    CellInfoWcdma wcdma = new CellInfoWcdma(inputCellInfo);
+                    CellIdentityWcdma id = wcdma.getCellIdentity();
+                    cellInfos = db.query(id.getMcc(), id.getMnc(), id.getCid(), id.getLac());
+                    if (cellInfos == null) {
+                        CellInfo ci = new CellInfo();
+                        ci.lng = 0d;
+                        ci.lat = 0d;
+                        ci.CID = id.getCid();
+                        ci.LAC = id.getLac();
+                        ci.MNC = id.getMnc();
+                        ci.MCC = id.getMcc();
+                        pushUnusedCells(ci);
+                    }
+                } catch(IllegalAccessException e) {
+                    android.util.Log.e("LNLP/Cell/Wcdma", e.toString());
+                } catch(InvocationTargetException e) {
+                    android.util.Log.e("LNLP/Cell/Wcdma", e.toString());
                 }
             }
             if (cellInfos == null) continue;
