@@ -18,82 +18,26 @@ import android.util.Log;
 
 public class GSMService extends LocationBackendService {
 
-    protected String TAG = "o.gfd.gsmlp.LocationBackendService";
-
-    protected Lock lock = new ReentrantLock();
-    protected Thread worker = null;
-    protected CellbasedLocationProvider lp = null;
-
-    public void start() {
-        if (worker != null && worker.isAlive()) return;
-
-        Log.d(TAG, "Starting location backend");
-        Handler handler = new Handler(Looper.getMainLooper());
-        final Context ctx = getApplicationContext();
-        handler.post(new Runnable() {
-            public void run() {
-                CellbasedLocationProvider.getInstance().init(ctx);
-            }
-        });
-        try {
-            lock.lock();
-            if (worker != null && worker.isAlive()) worker.interrupt();
-            worker = new Thread() {
-                public void run() {
-                    Log.d(TAG, "Starting reporter thread");
-                    lp = CellbasedLocationProvider.getInstance();
-                    double lastLng = 0d;
-                    double lastLat = 0d;
-                    try { while (true) {
-                        Thread.sleep(1000);
-
-                        try {
-                        CellInfo[] infos = lp.getAll();
-
-                        if (infos.length == 0) continue;
-
-                        double lng = 0d;
-                        double lat = 0d;
-                        for(CellInfo c : infos) {
-                            lng += c.lng;
-                            lat += c.lat;
-                        }
-                        lng /= infos.length;
-                        lat /= infos.length;
-                        float acc = (float)(800d / infos.length);
-                        if (lng != lastLng || lat != lastLat) {
-                            Log.d(TAG, "report (" + lat + "," + lng + ") / " + acc);
-                            lastLng = lng;
-                            lastLat = lat;
-                            report(LocationHelper.create("gsm", lat, lng, acc));
-                        }
-                        } catch (Exception e) {
-                            Log.e(TAG, "Update loop failed", e);
-                        }
-                    } } catch (InterruptedException e) {}
-                }
-            };
-            worker.start();
-        } catch (Exception e) {
-            Log.e(TAG, "Start failed", e);
-        } finally {
-            try { lock.unlock(); } catch (Exception e) {}
-        }
-    }
+    protected String TAG = "org.gfd.gsmlocation.GSMService";
+    protected CellBasedLocationProvider provider = null;
 
     @Override
     protected Location update() {
-        start();
+        if (provider == null) {
+            Log.d(TAG, "update(): no provider");
+            return null;
+        }
 
-        if (lp == null) return null;
+        CellInfo[] infos = provider.getAll();
 
-        CellInfo[] infos = lp.getAll();
+        if (infos.length == 0) {
+            Log.d(TAG, "update(): no known cell infos");
+            return null;
+        }
 
-        if (infos.length == 0) return null;
-
-        double lng = 0d;
-        double lat = 0d;
+        double lng = 0d, lat = 0d;
         for(CellInfo c : infos) {
+            Log.d(TAG, "update(): cell at " + c.lat + "," + c.lng);
             lng += c.lng;
             lat += c.lat;
         }
@@ -101,29 +45,40 @@ public class GSMService extends LocationBackendService {
         lat /= infos.length;
         float acc = (float)(800d / infos.length);
 
-        Log.d(TAG, "update (" + lat + "," + lng + ")");
+        Log.d(TAG, "update(): " + lat + "," + lng + " ±" + acc + "m");
         return LocationHelper.create("gsm", lat, lng, acc);
     }
 
     @Override
     protected void onOpen() {
+        Log.d(TAG, "onOpen()");
         super.onOpen();
 
-        start();
+        final GSMService service = this;
+        provider = new CellBasedLocationProvider() {
+            @Override
+            public void report() {
+                Log.d(TAG, "CellBasedLocationProvider.report()");
+                service.report(service.update());
+            }
+        };
 
-        Log.d(TAG, "Binder OPEN called");
+        Handler handler = new Handler(Looper.getMainLooper());
+        final Context ctx = getApplicationContext();
+        handler.post(new Runnable() {
+            public void run() {
+                provider.init(ctx);
+            }
+        });
     }
 
+    @Override
     protected void onClose() {
-        Log.d(TAG, "Binder CLOSE called");
+        Log.d(TAG, "onClose()");
         super.onClose();
-        try {
-            lock.lock();
-            if (worker != null && worker.isAlive()) worker.interrupt();
-            if (worker != null) worker = null;
-        } finally {
-            try { lock.unlock(); } catch (Exception e) {}
-        }
+
+        provider.deinit();
+        provider = null;
     }
 
 }
