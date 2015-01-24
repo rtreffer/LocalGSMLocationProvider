@@ -26,7 +26,7 @@ android:versionName="0.0.1.5"
   <service
     android:name="org.gfd.gsmlocation.GSMService"
     android:permission="android.permission.ACCESS_COARSE_LOCATION"
-    android:label="GSMNetworkLocationProvider">
+    android:label="GSM (OpenCellID)">
       <intent-filter>
         <action android:name="org.microg.nlp.LOCATION_BACKEND" />
       </intent-filter>
