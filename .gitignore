@@ -1,0 +1,6 @@
+bin/
+gen/
+local.properties
+project.properties
+proguard-project.txt
+build.xml

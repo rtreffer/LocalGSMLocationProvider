@@ -1,5 +1,8 @@
 package org.gfd.gsmlocation;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -10,9 +13,7 @@ import org.gfd.gsmlocation.model.CellInfo;
 
 import android.content.Context;
 import android.telephony.CellIdentityGsm;
-import android.telephony.CellIdentityWcdma;
 import android.telephony.CellInfoGsm;
-import android.telephony.CellInfoWcdma;
 import android.telephony.CellLocation;
 import android.telephony.NeighboringCellInfo;
 import android.telephony.PhoneStateListener;
@@ -30,7 +31,98 @@ import android.util.LruCache;
  * The time counter is used to drop towers that are stalled. This is a
  * protective tool to avoid completely broken data.
  */
-public class CellbasedLocationProvider {
+public class CellBasedLocationProvider {
+
+    /* Reflection-based shims to use CellInfoWcdma and stay compatible with API level 17 */
+    private static class CellIdentityWcdma {
+        private static Class<?> mCls;
+        private static Method mGetCid;
+        private static Method mGetLac;
+        private static Method mGetMcc;
+        private static Method mGetMnc;
+        private static Method mGetPsc;
+        static {
+            try {
+                mCls = Class.forName("android.telephony.CellIdentityWcdma");
+                mGetCid = mCls.getMethod("getCid");
+                mGetLac = mCls.getMethod("getLac");
+                mGetMcc = mCls.getMethod("getMcc");
+                mGetMnc = mCls.getMethod("getMnc");
+                mGetPsc = mCls.getMethod("getPsc");
+            } catch (final ClassNotFoundException e) {
+            } catch (final NoSuchMethodException e) {
+            }
+        }
+        private final Object mObj;
+        public CellIdentityWcdma(final Object obj) {
+            mObj = obj;
+        }
+        public int getCid() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetCid.invoke(mObj)).intValue();
+        }
+        public int getLac() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetLac.invoke(mObj)).intValue();
+        }
+        public int getMcc() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetMcc.invoke(mObj)).intValue();
+        }
+        public int getMnc() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetMnc.invoke(mObj)).intValue();
+        }
+        public int getPsc() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetPsc.invoke(mObj)).intValue();
+        }
+    }
+
+    private static class CellSignalStrengthWcdma {
+        private static Class<?> mCls;
+        private static Method mGetAsuLevel;
+        static {
+            try {
+                mCls = Class.forName("android.telephony.CellSignalStrengthWcdma");
+                mGetAsuLevel = mCls.getMethod("getAsuLevel");
+            } catch (final ClassNotFoundException e) {
+            } catch (final NoSuchMethodException e) {
+            }
+        }
+        private final Object mObj;
+        public CellSignalStrengthWcdma(final Object obj) {
+            mObj = obj;
+        }
+        public int getAsuLevel() throws IllegalAccessException, InvocationTargetException {
+            return ((Integer)mGetAsuLevel.invoke(mObj)).intValue();
+        }
+    }
+
+    private static class CellInfoWcdma {
+        private static Class<?> mCls;
+        private static Method mGetCellIdentity;
+        private static Method mGetCellSignalStrength;
+        static {
+            try {
+                mCls = Class.forName("android.telephony.CellInfoWcdma");
+                mGetCellIdentity = mCls.getMethod("getCellIdentity");
+                mGetCellSignalStrength = mCls.getMethod("getCellSignalStrength");
+            } catch (final ClassNotFoundException e) {
+            } catch (final NoSuchMethodException e) {
+            }
+        }
+        private final Object mObj;
+        public CellInfoWcdma(final Object obj) {
+            mObj = obj;
+        }
+        public static boolean isInstance(final Object obj) {
+            return null != mCls && mCls.isInstance(obj);
+        }
+        public CellIdentityWcdma getCellIdentity()
+                throws IllegalAccessException, InvocationTargetException {
+            return new CellIdentityWcdma(mGetCellIdentity.invoke(mObj));
+        }
+        public CellSignalStrengthWcdma getCellSignalStrength()
+                throws IllegalAccessException, InvocationTargetException {
+            return new CellSignalStrengthWcdma(mGetCellSignalStrength.invoke(mObj));
+        }
+    }
 
     // The key purpose of this class is pulling all the APIs and trying to turn it into s.th.
     // remotely consistent...
@@ -47,30 +139,6 @@ public class CellbasedLocationProvider {
 
     // Time based age: 6h should be enough between cell tower scans (at least for scans that we
     // catch!).
-
-    // // // // // // // // // // // // // Singleton methods // // // // // // // // // // // // //
-
-    // Singletons, while often regarded the bad taste of OOP, solve a single problem:
-    // make sure that never ever there's a second instance running. Great for stuff like a listener
-    // that might be resource hungry :-)
-
-    /**
-     * Internal instance for singleton lookup.
-     */
-    private static CellbasedLocationProvider ourInstance = new CellbasedLocationProvider();
-
-    /**
-     * Retrieve the singleton CellbasedLocationProvider instance.
-     * @return CellbasedLocationProvider the instance.
-     */
-    public static CellbasedLocationProvider getInstance() {
-        return ourInstance;
-    }
-
-    /**
-     * Private constructor to disallow foreign instantiation.
-     */
-    private CellbasedLocationProvider() { }
 
     /**
      * The measurement clock, incremented whenever the signal state changes significantly.
@@ -142,8 +210,6 @@ public class CellbasedLocationProvider {
      */
     public CellInfo[] getAll() {
         synchronized (recentCells) {
-            handle(false);
-            cleanup();
             return recentCells.toArray(new CellInfo[recentCells.size()]);
         }
     }
@@ -154,8 +220,6 @@ public class CellbasedLocationProvider {
      */
     public CellInfo[] getAllUnused() {
         synchronized (unusedCells) {
-            handle(false);
-            cleanup();
             return unusedCells.toArray(new CellInfo[unusedCells.size()]);
         }
     }
@@ -329,19 +393,25 @@ public class CellbasedLocationProvider {
                     pushUnusedCells(ci);
                 }
             }
-            if (inputCellInfo instanceof CellInfoWcdma) {
-                CellInfoWcdma wcdma = (CellInfoWcdma) inputCellInfo;
-                CellIdentityWcdma id = wcdma.getCellIdentity();
-                cellInfos = db.query(id.getMcc(), id.getMnc(), id.getCid(), id.getLac());
-                if (cellInfos == null) {
-                    CellInfo ci = new CellInfo();
-                    ci.lng = 0d;
-                    ci.lat = 0d;
-                    ci.CID = id.getCid();
-                    ci.LAC = id.getLac();
-                    ci.MNC = id.getMnc();
-                    ci.MCC = id.getMcc();
-                    pushUnusedCells(ci);
+            if (CellInfoWcdma.isInstance(inputCellInfo)) {
+                try {
+                    CellInfoWcdma wcdma = new CellInfoWcdma(inputCellInfo);
+                    CellIdentityWcdma id = wcdma.getCellIdentity();
+                    cellInfos = db.query(id.getMcc(), id.getMnc(), id.getCid(), id.getLac());
+                    if (cellInfos == null) {
+                        CellInfo ci = new CellInfo();
+                        ci.lng = 0d;
+                        ci.lat = 0d;
+                        ci.CID = id.getCid();
+                        ci.LAC = id.getLac();
+                        ci.MNC = id.getMnc();
+                        ci.MCC = id.getMcc();
+                        pushUnusedCells(ci);
+                    }
+                } catch(IllegalAccessException e) {
+                    android.util.Log.e("LNLP/Cell/Wcdma", e.toString());
+                } catch(InvocationTargetException e) {
+                    android.util.Log.e("LNLP/Cell/Wcdma", e.toString());
                 }
             }
             if (cellInfos == null) continue;
@@ -359,7 +429,7 @@ public class CellbasedLocationProvider {
      * measurement counter should be increased on success.
      * @param inc True if the measurement counter should be increased.
      */
-    private void handle(boolean inc) {
+    private void handleModemEvent(boolean inc) {
         if (telephonyManager == null) return;
         final List<android.telephony.CellInfo> cellInfos = telephonyManager.getAllCellInfo();
         final List<NeighboringCellInfo> neighbours = telephonyManager.getNeighboringCellInfo();
@@ -376,6 +446,15 @@ public class CellbasedLocationProvider {
         synchronized (recentCells) {
             cleanup();
         }
+
+        report();
+    }
+
+    /**
+     * Report the updated cell information.
+     * Does nothing; to be overridden in a subclass.
+     */
+    public void report() {
     }
 
     /**
@@ -384,9 +463,101 @@ public class CellbasedLocationProvider {
     private TelephonyManager telephonyManager;
 
     /**
-     * SignalStringthInfo represents a single CID/LAC with a rssi. Used for lookups / caching.
+     * The listener used to receive modem events updates.
      */
-    private static class SignalStringthInfo {
+    private PhoneStateListener phoneStateListener;
+
+    /**
+     * Initialize the location provider.
+     * @param ctx The application context.
+     */
+    public void init(Context ctx) {
+        telephonyManager = (TelephonyManager) ctx.getSystemService(Context.TELEPHONY_SERVICE);
+
+        final Context fctx = ctx;
+        new Thread() {
+            public void run() {
+                db.init(fctx);
+            }
+        }.start();
+
+        /**
+         * The <b>actual</b> phone listener, handling new modem based events.
+         */
+        phoneStateListener = new PhoneStateListener() {
+
+            /**
+             * A cache for the last few cell/strength combinations we've seen. This helps to
+             * determine if we should count a measurement as a "new" measurement or if we should
+             * simply add whatever we got without incrementing the cell based time.
+             */
+            private LruCache<SignalStrengthInfo,SignalStrengthInfo> recentSignals =
+                    new LruCache<SignalStrengthInfo, SignalStrengthInfo>(16);
+
+            public void onSignalStrengthsChanged(SignalStrength signalStrength) {
+                if (location != null && location instanceof GsmCellLocation) {
+                    SignalStrengthInfo ssi = new SignalStrengthInfo();
+                    ssi.rssi = signalStrength.getGsmSignalStrength();
+                    ssi.CID = ((GsmCellLocation) location).getCid();
+                    ssi.LAC = ((GsmCellLocation) location).getLac();
+                    boolean inc = false;
+                    synchronized (recentSignals) {
+                        inc = recentSignals.remove(ssi) == null;
+                        recentSignals.put(ssi,ssi);
+                    }
+                    if (inc) {
+                        android.util.Log.d("LNLP/Signal/Measurement", ssi.toString());
+                        handleModemEvent(true);
+                        return;
+                    }
+                }
+                handleModemEvent(false);
+            }
+
+            public void onServiceStateChanged(ServiceState serviceState) {
+                handleModemEvent(true);
+            }
+
+            public void onCellLocationChanged(CellLocation location) {
+                if (!(location instanceof GsmCellLocation)) return;
+                CellBasedLocationProvider.this.location = (GsmCellLocation) location;
+                measurement.getAndIncrement();
+                add(location);
+                handleModemEvent(false);
+            }
+
+            public void onDataConnectionStateChanged(int state) {
+                handleModemEvent(false);
+            }
+
+            public void onCellInfoChanged(List<android.telephony.CellInfo> cellInfo) {
+                measurement.getAndIncrement();
+                addCells(cellInfo);
+                handleModemEvent(false);
+            }
+        };
+
+        telephonyManager.listen(
+            phoneStateListener,
+            PhoneStateListener.LISTEN_SIGNAL_STRENGTHS |
+            PhoneStateListener.LISTEN_CELL_INFO |
+            PhoneStateListener.LISTEN_CELL_LOCATION |
+            PhoneStateListener.LISTEN_DATA_CONNECTION_STATE |
+            PhoneStateListener.LISTEN_SERVICE_STATE
+        );
+    }
+
+    /**
+     * Deinitialize the location provider.
+     */
+    public void deinit() {
+        telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE);
+    }
+
+    /**
+     * SignalStrengthInfo represents a single CID/LAC with a rssi. Used for lookups / caching.
+     */
+    private static class SignalStrengthInfo {
         public int CID;
         public int LAC;
         public int rssi;
@@ -395,7 +566,7 @@ public class CellbasedLocationProvider {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
 
-            SignalStringthInfo that = (SignalStringthInfo) o;
+            SignalStrengthInfo that = (SignalStrengthInfo) o;
 
             if (CID != that.CID) return false;
             if (LAC != that.LAC) return false;
@@ -412,88 +583,12 @@ public class CellbasedLocationProvider {
         }
 
         public String toString() {
-            return "SignalStringthInfo{" +
+            return "SignalStrengthInfo{" +
                     "CID=" + CID +
                     ", LAC=" + LAC +
                     ", rssi=" + rssi +
                     '}';
         }
-    }
-
-    /**
-     * Initialize the location provider.
-     * @param ctx The application context.
-     */
-    public void init(Context ctx) {
-
-        telephonyManager = (TelephonyManager) ctx.getSystemService(Context.TELEPHONY_SERVICE);
-
-        final Context fctx = ctx;
-        new Thread() {
-            public void run() {
-                db.init(fctx);
-            }
-        }.start();
-
-        /**
-         * The <b>actual</b> phone listener, handling new modem based events.
-         */
-        final PhoneStateListener listener = new PhoneStateListener() {
-
-            /**
-             * A cache for the last few cell/strength combinations we've seen. This helps to
-             * determine if we should count a measurement as a "new" measurement or if we should
-             * simply add whatever we got without incrementing the cell based time.
-             */
-            private LruCache<SignalStringthInfo,SignalStringthInfo> recentSignals =
-                    new LruCache<SignalStringthInfo, SignalStringthInfo>(16);
-
-            public void onSignalStrengthsChanged(SignalStrength signalStrength) {
-                if (location != null && location instanceof GsmCellLocation) {
-                    SignalStringthInfo ssi = new SignalStringthInfo();
-                    ssi.rssi = signalStrength.getGsmSignalStrength();
-                    ssi.CID = ((GsmCellLocation) location).getCid();
-                    ssi.LAC = ((GsmCellLocation) location).getLac();
-                    boolean inc = false;
-                    synchronized (recentSignals) {
-                        inc = recentSignals.remove(ssi) == null;
-                        recentSignals.put(ssi,ssi);
-                    }
-                    if (inc) {
-                        android.util.Log.d("LNLP/Signal/Measurement", ssi.toString());
-                        handle(true);
-                        return;
-                    }
-                }
-                handle(false);
-            }
-            public void onServiceStateChanged(ServiceState serviceState) {
-                handle(true);
-            }
-            public void onCellLocationChanged(CellLocation location) {
-                if (!(location instanceof GsmCellLocation)) return;
-                CellbasedLocationProvider.this.location = (GsmCellLocation) location;
-                measurement.getAndIncrement();
-                add(location);
-                handle(false);
-            }
-            public void onDataConnectionStateChanged(int state) {
-                handle(false);
-            }
-            public void onCellInfoChanged(List<android.telephony.CellInfo> cellInfo) {
-                measurement.getAndIncrement();
-                addCells(cellInfo);
-                handle(false);
-            }
-        };
-        telephonyManager.listen(
-            listener,
-            PhoneStateListener.LISTEN_SIGNAL_STRENGTHS |
-            PhoneStateListener.LISTEN_CELL_INFO |
-            PhoneStateListener.LISTEN_CELL_LOCATION |
-            PhoneStateListener.LISTEN_DATA_CONNECTION_STATE |
-            PhoneStateListener.LISTEN_SERVICE_STATE
-        );
     }
 
 }
